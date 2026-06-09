@@ -1,0 +1,63 @@
+### FlowForge sample requests (VS Code REST Client / JetBrains HTTP client)
+@base = http://localhost:3000
+@key = dev-secret-key
+
+### Health (no auth)
+GET {{base}}/health
+
+### List workflows
+GET {{base}}/workflows
+x-api-key: {{key}}
+
+### Create a workflow
+# @name createWorkflow
+POST {{base}}/workflows
+x-api-key: {{key}}
+Content-Type: application/json
+
+{
+  "name": "Demo: classify + approve",
+  "definition": {
+    "steps": [
+      { "id": "classify", "type": "llm",
+        "config": { "prompt": "Return JSON about an urgent incident with a \"priority\" key.", "parseJson": true } },
+      { "id": "triage", "type": "conditional", "dependsOn": ["classify"],
+        "config": { "expression": "steps.classify.output.json.priority === 'high'" } },
+      { "id": "gate", "type": "approval", "dependsOn": ["triage"],
+        "runWhen": { "step": "triage", "equals": true }, "config": { "prompt": "Approve?" } },
+      { "id": "finalize", "type": "llm", "dependsOn": ["gate"],
+        "runWhen": { "step": "gate", "equals": true },
+        "config": { "prompt": "Closing note." } }
+    ]
+  }
+}
+
+### Submit a run (async -> 202)
+# @name startRun
+POST {{base}}/workflows/{{createWorkflow.response.body.id}}/runs
+x-api-key: {{key}}
+Content-Type: application/json
+
+{ "input": {}, "idempotencyKey": "demo-run-1" }
+
+### Fetch the trace (poll this; it will show waiting_approval)
+GET {{base}}/traces/{{startRun.response.body.id}}
+x-api-key: {{key}}
+
+### Approve the gate -> run resumes
+POST {{base}}/runs/{{startRun.response.body.id}}/steps/gate/approve
+x-api-key: {{key}}
+Content-Type: application/json
+
+{ "decidedBy": "me", "note": "looks good" }
+
+### Reject the gate instead (gated branch is skipped)
+POST {{base}}/runs/{{startRun.response.body.id}}/steps/gate/reject
+x-api-key: {{key}}
+Content-Type: application/json
+
+{ "decidedBy": "me", "note": "not now" }
+
+### List recent runs
+GET {{base}}/runs
+x-api-key: {{key}}

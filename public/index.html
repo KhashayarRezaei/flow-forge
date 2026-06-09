@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FlowForge · Trace Viewer</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --blue: #58a6ff;
+        --gray: #6e7681;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        background: var(--panel);
+      }
+      header h1 { font-size: 18px; margin: 0 16px 0 0; }
+      input {
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+      input#runId { width: 320px; }
+      button {
+        background: var(--accent);
+        color: #0d1117;
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { opacity: 0.9; }
+      main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+      .muted { color: var(--muted); }
+      .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        min-width: 120px;
+      }
+      .card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .card .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+      .badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .s-completed { background: rgba(63,185,80,0.18); color: var(--green); }
+      .s-failed { background: rgba(248,81,73,0.18); color: var(--red); }
+      .s-running { background: rgba(88,166,255,0.18); color: var(--blue); }
+      .s-waiting_approval { background: rgba(210,153,34,0.2); color: var(--yellow); }
+      .s-pending { background: rgba(110,118,129,0.2); color: var(--gray); }
+      .s-skipped { background: rgba(110,118,129,0.15); color: var(--gray); }
+      .s-canceled { background: rgba(110,118,129,0.2); color: var(--gray); }
+      .step {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--gray);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+      .step.completed { border-left-color: var(--green); }
+      .step.failed { border-left-color: var(--red); }
+      .step.running { border-left-color: var(--blue); }
+      .step.waiting_approval { border-left-color: var(--yellow); }
+      .step.skipped { border-left-color: var(--gray); opacity: 0.7; }
+      .step-head {
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 16px; cursor: pointer; user-select: none;
+      }
+      .step-head:hover { background: rgba(255,255,255,0.02); }
+      .step-title { font-weight: 600; }
+      .step-type {
+        font-size: 11px; color: var(--muted); border: 1px solid var(--border);
+        border-radius: 4px; padding: 1px 6px; text-transform: uppercase;
+      }
+      .step-meta { margin-left: auto; display: flex; gap: 16px; color: var(--muted); font-size: 12px; }
+      .step-body { padding: 0 16px 14px 16px; display: none; }
+      .step.open .step-body { display: block; }
+      .kv { display: grid; grid-template-columns: 120px 1fr; gap: 4px 12px; margin: 8px 0; }
+      .kv .label { color: var(--muted); }
+      pre {
+        background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+        padding: 10px; overflow: auto; max-height: 320px; font-size: 12px; margin: 6px 0;
+      }
+      .dlq { border-left-color: var(--red); }
+      .error-box { color: var(--red); }
+      .deps { font-size: 12px; color: var(--muted); }
+      a { color: var(--accent); }
+      .approve-hint {
+        background: rgba(210,153,34,0.1); border: 1px solid var(--yellow);
+        border-radius: 6px; padding: 10px; margin: 8px 0; font-size: 13px;
+      }
+      code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>⚙️ FlowForge</h1>
+      <input id="apiKey" placeholder="x-api-key" value="dev-secret-key" />
+      <input id="runId" placeholder="run id (uuid)" />
+      <button id="load">Load trace</button>
+      <button id="auto" title="Reload every 2s">▶ Auto-refresh</button>
+      <span id="status" class="muted"></span>
+    </header>
+    <main>
+      <div id="meta"></div>
+      <div id="cards" class="cards"></div>
+      <div id="steps"></div>
+      <div id="dlq"></div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let timer = null;
+
+      function badge(status) {
+        return `<span class="badge s-${status}">${status}</span>`;
+      }
+      function esc(s) {
+        return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      }
+      function json(v) {
+        if (v === null || v === undefined) return '<span class="muted">—</span>';
+        return `<pre>${esc(JSON.stringify(v, null, 2))}</pre>`;
+      }
+      function ms(v) {
+        return v == null ? '—' : v + ' ms';
+      }
+
+      async function load() {
+        const id = $('runId').value.trim();
+        const key = $('apiKey').value.trim();
+        if (!id) return;
+        $('status').textContent = 'Loading…';
+        try {
+          const res = await fetch(`/traces/${id}`, { headers: { 'x-api-key': key } });
+          if (!res.ok) {
+            $('status').textContent = `Error ${res.status}: ${await res.text()}`;
+            return;
+          }
+          render(await res.json());
+          $('status').textContent = 'Updated ' + new Date().toLocaleTimeString();
+        } catch (e) {
+          $('status').textContent = 'Error: ' + e.message;
+        }
+      }
+
+      function render(t) {
+        const r = t.run;
+        $('meta').innerHTML = `
+          <h2 style="margin:0 0 4px">${esc(t.workflow ? t.workflow.name : 'Run')} ${badge(r.status)}</h2>
+          <div class="muted">run <code>${r.id}</code> · started ${r.startedAt ?? '—'} · duration ${ms(r.durationMs)}</div>
+          ${r.error ? `<div class="error-box">⚠ ${esc(r.error)}</div>` : ''}
+        `;
+
+        const s = t.summary;
+        const byStatus = Object.entries(s.byStatus || {})
+          .map(([k, v]) => `${badge(k)} ${v}`)
+          .join(' ');
+        $('cards').innerHTML = `
+          <div class="card"><div class="k">Steps</div><div class="v">${s.totalSteps}</div></div>
+          <div class="card"><div class="k">Total tokens</div><div class="v">${s.totalTokens}</div></div>
+          <div class="card"><div class="k">Step latency</div><div class="v">${s.totalStepLatencyMs}<span style="font-size:13px"> ms</span></div></div>
+          <div class="card"><div class="k">Dead letters</div><div class="v">${s.deadLetterCount}</div></div>
+          <div class="card" style="flex:1"><div class="k">Status breakdown</div><div class="v" style="font-size:14px;margin-top:8px">${byStatus}</div></div>
+        `;
+
+        $('steps').innerHTML = t.steps
+          .map((step) => {
+            const tokens =
+              step.totalTokens != null
+                ? `${step.totalTokens} tok (${step.promptTokens ?? 0}+${step.completionTokens ?? 0})`
+                : '';
+            const approveHint =
+              step.status === 'waiting_approval'
+                ? `<div class="approve-hint">⏸ Awaiting approval. Resume with:<br/>
+                   <code>POST /runs/${r.id}/steps/${step.stepId}/approve</code> or <code>/reject</code></div>`
+                : '';
+            return `
+            <div class="step ${step.status}">
+              <div class="step-head" onclick="this.parentNode.classList.toggle('open')">
+                <span class="step-type">${step.type}</span>
+                <span class="step-title">${esc(step.name || step.stepId)}</span>
+                ${badge(step.status)}
+                <span class="step-meta">
+                  ${step.attempt > 1 ? `<span>↻ ${step.attempt} attempts</span>` : ''}
+                  ${tokens ? `<span>${tokens}</span>` : ''}
+                  <span>${ms(step.latencyMs)}</span>
+                </span>
+              </div>
+              <div class="step-body">
+                ${approveHint}
+                <div class="kv">
+                  <span class="label">step id</span><span><code>${step.stepId}</code></span>
+                  <span class="label">depends on</span><span class="deps">${(step.dependsOn || []).join(', ') || '—'}</span>
+                  <span class="label">started</span><span>${step.startedAt ?? '—'}</span>
+                  <span class="label">finished</span><span>${step.finishedAt ?? '—'}</span>
+                </div>
+                <div class="label muted">input</div>${json(step.input)}
+                <div class="label muted">output</div>${json(step.output)}
+                ${step.error ? `<div class="label error-box">error</div>${json(step.error)}` : ''}
+              </div>
+            </div>`;
+          })
+          .join('');
+
+        $('dlq').innerHTML = (t.deadLetters || []).length
+          ? `<h3>Dead letters</h3>` +
+            t.deadLetters
+              .map(
+                (d) => `<div class="step dlq open"><div class="step-body" style="padding-top:12px">
+                  <div class="kv">
+                    <span class="label">step</span><span>${esc(d.stepId)}</span>
+                    <span class="label">attempts</span><span>${d.attemptsMade}</span>
+                    <span class="label">job</span><span><code>${esc(d.jobId)}</code></span>
+                  </div>
+                  <div class="label error-box">error</div><pre>${esc(d.error)}</pre>
+                </div></div>`,
+              )
+              .join('')
+          : '';
+      }
+
+      $('load').onclick = load;
+      $('runId').addEventListener('keydown', (e) => e.key === 'Enter' && load());
+      $('auto').onclick = () => {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+          $('auto').textContent = '▶ Auto-refresh';
+        } else {
+          load();
+          timer = setInterval(load, 2000);
+          $('auto').textContent = '⏸ Stop';
+        }
+      };
+
+      // Prefill run id from ?run= query param.
+      const q = new URLSearchParams(location.search).get('run');
+      if (q) {
+        $('runId').value = q;
+        load();
+      }
+    </script>
+  </body>
+</html>

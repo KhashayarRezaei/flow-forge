@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flowforge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flowforge
+      POSTGRES_PASSWORD: flowforge
+      POSTGRES_DB: flowforge
+    ports:
+      - '5432:5432'
+    volumes:
+      - flowforge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flowforge -d flowforge']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: flowforge-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - flowforge_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  flowforge_pgdata:
+  flowforge_redisdata:
